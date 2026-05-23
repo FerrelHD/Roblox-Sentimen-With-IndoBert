@@ -1,0 +1,5 @@
+Metric,BEFORE (Rating),AFTER (IndoBERT)
+Total Reviews,49485,49485
+Negatif,13990,15690
+Netral,3270,0
+Positif,32225,33795

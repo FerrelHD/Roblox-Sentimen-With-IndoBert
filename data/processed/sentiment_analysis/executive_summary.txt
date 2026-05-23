@@ -1,0 +1,119 @@
+
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    EXECUTIVE SUMMARY                                      ║
+║         Sentiment Analysis: Rating vs IndoBERT Comparison                  ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+PROJECT OVERVIEW
+────────────────────────────────────────────────────────────────────────────
+This analysis compares two sentiment classification approaches on 49,485 Roblox 
+reviews:
+1. Rating-Based Sentiment (3 classes: Positif, Negatif, Netral)
+2. Text-Based Sentiment via IndoBERT (2 classes: Positif, Negatif)
+
+KEY FINDINGS
+────────────────────────────────────────────────────────────────────────────
+
+📊 AGREEMENT RATE: 84.26%
+   • 41,696 reviews have matching sentiment between rating and IndoBERT
+   • Strong alignment indicates model reliability
+
+⚠️ DISAGREEMENT RATE: 15.74%
+   • 7,789 reviews show sentiment mismatch
+   • Provides insights into rating behavior vs. actual text sentiment
+
+SENTIMENT DISTRIBUTION COMPARISON
+────────────────────────────────────────────────────────────────────────────
+
+Rating-Based (Traditional):
+  ✅ Positif:  32,225 reviews (65.12%)
+  ❌ Negatif:  13,990 reviews (28.27%)
+  ⚪ Netral:    3,270 reviews (6.61%)
+  ─────────────────────────────
+  Total:       49,485 reviews
+
+IndoBERT-Based (AI Model):
+  ✅ Positif:  33,795 reviews (68.29%)
+  ❌ Negatif:  15,690 reviews (31.71%)
+  ⚪ Netral:         0 reviews (0.00%) [Binary Classification]
+  ─────────────────────────────
+  Total:       49,485 reviews
+
+MISMATCH ANALYSIS
+────────────────────────────────────────────────────────────────────────────
+
+🔴 Most Common Mismatch: Positif → Negatif (2,354 cases | 4.75%)
+   Interpretation: Users give high ratings but text contains specific complaints
+   Example: "Game is fun but crashes frequently" → Rating 5, but text negative
+
+🟡 Second Most Common: Negatif → Positif (2,165 cases | 4.37%)
+   Interpretation: Low ratings but relatively neutral/positive text
+   Example: Poor rating but review lacks strong negative language
+
+🟢 Netral Cases (3,270 total):
+   • → Positif: 1,759 cases (53.80%)
+   • → Negatif: 1,511 cases (46.20%)
+   Model performs balanced conversion of neutral ratings
+
+TECHNICAL METRICS
+────────────────────────────────────────────────────────────────────────────
+
+Model: indobenchmark/indobert-base-p1
+Task: Fine-tuned on Roblox reviews for binary sentiment classification
+Test Accuracy: 85.49%
+Processing Time: ~100 seconds for 49,485 texts
+Hardware: GPU-accelerated (CUDA 11.8, RTX 2060)
+
+BUSINESS IMPLICATIONS
+────────────────────────────────────────────────────────────────────────────
+
+1️⃣ RELIABILITY
+   The 84.26% agreement rate suggests IndoBERT can reliably replace or 
+   complement manual rating analysis.
+
+2️⃣ INSIGHT GENERATION
+   The 15.74% disagreement reveals important patterns:
+   • Users may rate emotionally rather than based on actual sentiment
+   • Text analysis catches nuances that ratings miss
+   • Hybrid approach (rating + text) provides deeper understanding
+
+3️⃣ USE CASES
+   ✓ Automated sentiment monitoring
+   ✓ Quality assurance on user reviews
+   ✓ Complaint detection from high-rated reviews
+   ✓ Trend analysis over time
+
+RECOMMENDATIONS
+────────────────────────────────────────────────────────────────────────────
+
+SHORT-TERM (Immediate Actions)
+  □ Use IndoBERT for automated sentiment tagging on new reviews
+  □ Flag disagreement cases for manual review (quality assurance)
+  □ Implement sentiment trending dashboard
+
+MEDIUM-TERM (1-3 Months)
+  □ Fine-tune model with more labeled data
+  □ Extend to multi-class classification (including Netral)
+  □ Integrate with review management system
+
+LONG-TERM (6+ Months)
+  □ Build sentiment-based user segmentation
+  □ Develop predictive models (e.g., churn prediction from sentiment)
+  □ Create personalized response system based on sentiment analysis
+
+CONCLUSION
+────────────────────────────────────────────────────────────────────────────
+
+The IndoBERT sentiment model demonstrates strong performance and alignment 
+with traditional rating-based classification. The 84.26% agreement rate, 
+combined with specific insights from disagreement cases, makes this model 
+suitable for production deployment in automated sentiment monitoring systems.
+
+The identified mismatches (15.74%) offer valuable business intelligence, 
+revealing gaps between user ratings and actual review sentiment that warrant 
+further investigation.
+
+═════════════════════════════════════════════════════════════════════════════
+Generated: {self.timestamp}
+Project: Skripsi Roblox Sentiment Analysis
+═════════════════════════════════════════════════════════════════════════════
