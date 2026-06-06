@@ -1,5 +1,3 @@
-Metric,BEFORE (Rating),AFTER (IndoBERT)
-Total Reviews,49485,49485
-Negatif,13990,15690
-Netral,3270,0
-Positif,32225,33795
+version https://git-lfs.github.com/spec/v1
+oid sha256:ea91b29d584d10912ea54d92b0d1820d4e4b90a35c9e88066a2c9a9b20aaccb0
+size 125
