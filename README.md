@@ -13,6 +13,7 @@ Project ini adalah sistem end-to-end untuk analisis sentimen review Roblox dari 
 - Fokus utama dashboard: tren sentimen berbasis waktu + pola teks review (bukan sekadar rating)
 
 ## 📖 Daftar Isi
+- [Panduan Penulisan Skripsi](#-panduan-penulisan-skripsi)
 - [Tujuan](#-tujuan)
 - [Fitur](#-fitur)
 - [Struktur Folder](#-struktur-folder)
@@ -22,6 +23,43 @@ Project ini adalah sistem end-to-end untuk analisis sentimen review Roblox dari 
 - [Alur Kerja](#-alur-kerja)
 - [Model & Output](#-model--output)
 - [Troubleshooting](#-troubleshooting)
+
+## 📝 Panduan Penulisan Skripsi
+Berikut adalah panduan struktur bab skripsi berdasarkan isi proyek ini.
+
+### Bab 1: Pendahuluan
+- Latar belakang: kebutuhan analisis sentimen review aplikasi, khususnya Roblox di Google Play Store.
+- Rumusan masalah: bagaimana mengidentifikasi sentimen review menggunakan pendekatan machine learning dan deep learning.
+- Tujuan penelitian: membangun sistem end-to-end untuk analisis sentimen, membandingkan SVM dan IndoBERT, serta membuat dashboard visualisasi.
+- Manfaat penelitian: membantu pengembang aplikasi memahami opini pengguna, mendeteksi tren sentimen, dan meningkatkan kualitas aplikasi.
+- Ruang lingkup: scraping review, preprocessing teks, baseline SVM, IndoBERT dengan auto-labeling, analisis perbandingan, dan dashboard.
+
+### Bab 2: Tinjauan Pustaka
+- Definisi analisis sentimen dan aplikasi dalam review aplikasi mobile.
+- Teori NLP untuk Bahasa Indonesia, termasuk tokenisasi dan TF-IDF.
+- Machine learning untuk klasifikasi teks: SVM, TF-IDF, dan perbandingan dengan model deep learning.
+- Model Bahasa Indonesia: IndoBERT dan manfaat transfer learning untuk sentiment analysis.
+- Konsep auto-labeling teacher-student: menggunakan model teacher untuk memberi label awal dan melatih model student.
+- Studi sebelumnya tentang sentiment analysis untuk aplikasi atau game mobile (jika ada, bisa ditambahkan dari jurnal atau artikel).
+
+### Bab 3: Metodologi Penelitian
+- Dataset: sumber data dari Google Play Store, deskripsi `data/raw/roblox_raw.csv` dan file backup `data/raw/roblox_raw_backup_*.csv`.
+- Scraping: proses `scraping.py` untuk mengumpulkan review.
+- Preprocessing: proses `preprocessing.py` untuk membersihkan teks dan menyimpan `data/processed/roblox_cleaned.csv`.
+- Baseline ML: pelatihan SVM + TF-IDF di `train_model.py`, lalu klasifikasi pada `sentiment.py` menghasilkan `data/processed/roblox_sentiment.csv`.
+- Deep learning IndoBERT: pelatihan `train_indobert.py` dengan auto-labeling teacher, model tersimpan di `models/indobert_sentiment/best_model_annotated/`.
+- Evaluasi: metrik model di `models/indobert_sentiment/best_model_annotated/metrics.json`, metode perbandingan rating di `sentiment_comparison_analysis.py`.
+- Implementasi dashboard: `app.py` sebagai antarmuka visualisasi hasil, dan `predict_indobert.py` untuk prediksi teks real-time.
+- Tools dan lingkungan: Python, Streamlit, Pandas, scikit-learn, PyTorch, HuggingFace Transformers.
+
+### Bab 4: Hasil dan Pembahasan
+- Hasil preprocessing: jumlah data bersih dan karakteristik teks setelah pembersihan.
+- Hasil baseline SVM: akurasi, confusion matrix, distribusi sentimen pada `data/processed/roblox_sentiment.csv`.
+- Hasil IndoBERT: metrik fine-tuning di `metrics.json`, perbandingan dengan model baseline.
+- Analisis perbandingan rating: hasil `sentiment_comparison_full.csv` dan `sentiment_comparison_summary.csv` untuk membandingkan label model dengan rating asli.
+- Visualisasi dan insight: tampilkan grafik dari dashboard `app.py` atau output `data/processed/sentiment_analysis/` jika tersedia.
+- Diskusi: kelebihan dan kekurangan pendekatan, kasus disagreement (contoh dari `sentiment_disagreement_examples.csv`), serta rekomendasi perbaikan.
+- KESIMPULAN awal: fokus pada efektivitas auto-labeling IndoBERT dibanding SVM dan nilai praktis dashboard.
 
 ## 🎯 Tujuan
 - Mengklasifikasikan sentimen review Roblox: **positif / netral / negatif**

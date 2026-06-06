@@ -72,3 +72,4 @@ torchaudio==2.0.2
 transformers==4.30.2
 datasets==2.13.1
 accelerate==0.20.3
+streamlit-wordcloud==0.2.0

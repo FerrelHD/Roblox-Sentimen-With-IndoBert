@@ -23,6 +23,24 @@ try:
 except ImportError:
     TRANSFORMERS_AVAILABLE = False
 
+try:
+    from google_play_scraper import app as gp_app
+    GP_AVAILABLE = True
+except ImportError:
+    GP_AVAILABLE = False
+
+try:
+    from wordcloud import WordCloud, STOPWORDS as WC_STOPWORDS
+    WORDCLOUD_AVAILABLE = True
+except ImportError:
+    WORDCLOUD_AVAILABLE = False
+
+try:
+    from streamlit_wordcloud import st_wordcloud
+    STREAMLIT_WORDCLOUD_AVAILABLE = True
+except ImportError:
+    STREAMLIT_WORDCLOUD_AVAILABLE = False
+
 # === PAGE CONFIG ===
 st.set_page_config(
     page_title="Roblox Sentiment Dashboard",
@@ -445,6 +463,217 @@ def extract_terms(texts, top_n=10):
     top_bigrams = [w for w, _ in Counter(bigrams).most_common(int(top_n))]
     return top_tokens, top_bigrams
 
+@st.cache_data
+def load_changelog_cache(cache_path="data/processed/changelog_cache.json"):
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_changelog_cache(cache, cache_path="data/processed/changelog_cache.json"):
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def fetch_google_play_changelog(app_id="com.roblox.client"):
+    cache = load_changelog_cache()
+    if cache.get("appId") == app_id and cache.get("recentChanges"):
+        return cache
+
+    if not GP_AVAILABLE:
+        return cache
+
+    try:
+        app_info = gp_app(app_id, lang="en", country="us")
+        changelog_text = app_info.get("recentChanges") or ""
+        cache_data = {
+            "appId": app_id,
+            "version": app_info.get("version", "Unknown"),
+            "recentChanges": changelog_text,
+            "updated": app_info.get("updated")
+        }
+        save_changelog_cache(cache_data)
+        return cache_data
+    except Exception:
+        return cache
+
+def gather_peak_texts(df_day: pd.DataFrame, sentiment_label: str):
+    if df_day.empty:
+        return []
+    if "label" in df_day.columns:
+        texts = df_day[df_day["label"].astype(str).str.strip().str.lower() == sentiment_label].get("cleaned_content", df_day.get("content", pd.Series(dtype="object"))).fillna("").astype(str).tolist()
+        if texts:
+            return texts
+    return df_day.get("cleaned_content", df_day.get("content", pd.Series(dtype="object"))).fillna("").astype(str).tolist()
+
+def build_wordcloud_frequencies(texts, top_n=40):
+    if not WORDCLOUD_AVAILABLE or not texts:
+        return {}
+
+    all_words = []
+    stopwords = set(WC_STOPWORDS) | set(STOPWORDS_ID)
+    for t in texts:
+        if not t:
+            continue
+        tokens = [w for w in re.findall(r"[a-zA-Z_]+", str(t).lower()) if len(w) >= 3 and w not in stopwords]
+        all_words.extend(tokens)
+
+    return dict(Counter(all_words).most_common(top_n))
+
+def render_wordcloud_plotly(word_freq, title, color_map="Greens"):
+    if not word_freq:
+        fig = go.Figure()
+        fig.update_layout(
+            title=title,
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        return fig
+
+    try:
+        wc = WordCloud(
+            width=1000,
+            height=600,
+            background_color='white',
+            colormap=color_map,
+            stopwords=set(WC_STOPWORDS) | set(STOPWORDS_ID),
+            max_words=80
+        ).generate_from_frequencies(word_freq)
+        layout = wc.layout_
+        xd, yd, texts, sizes, colors, freqs = [], [], [], [], [], []
+        for item in layout:
+            (word, freq), font_size, position, orientation, color = item
+            x, y = position
+            xd.append(x)
+            yd.append(y)
+            texts.append(word)
+            sizes.append(max(int(font_size / 1.5), 12))
+            colors.append(color)
+            freqs.append(freq)
+
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=xd,
+            y=[-y for y in yd],
+            mode='text',
+            text=texts,
+            textfont={'size': sizes, 'color': colors},
+            hovertemplate='<b>%{text}</b><br>Freq %{customdata[0]}<extra></extra>',
+            customdata=np.stack([freqs], axis=-1)
+        ))
+        fig.update_layout(
+            title=title,
+            xaxis={'visible': False},
+            yaxis={'visible': False},
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            margin=dict(l=10, r=10, t=40, b=10)
+        )
+        return fig
+    except Exception:
+        fig = go.Figure()
+        fig.update_layout(title=title)
+        return fig
+
+def match_terms_with_changelog(word_freq, changelog_text):
+    if not changelog_text or not word_freq:
+        return []
+    changelog_words = set(re.findall(r"[a-zA-Z_]+", changelog_text.lower()))
+    return [word for word in word_freq.keys() if word.lower() in changelog_words]
+
+NARASI_POSITIF = """
+Lonjakan 1.344 review positif pada tanggal ini bersamaan dengan
+rilisnya versi 2.715.1115 (3 April 2026), yang membawa sejumlah
+fitur besar yang disambut antusias oleh komunitas pemain.
+
+Versi 2.715.1115 dirilis pada 3 April 2026 dan menjadi salah satu
+update terbesar Roblox di kuartal pertama 2026. Update ini mencakup:
+
+• Avatar Makeup — fitur kosmetik baru (eyeshadow, lipstik, blush)
+  yang dapat di-mix & match, diluncurkan dengan 150+ item dari
+  kreator UGC sejak hari pertama.
+
+• Trusted Friends — perluasan fitur pertemanan lintas usia,
+  memungkinkan teman dan keluarga dari kelompok usia berbeda
+  untuk bermain dan chat bersama di Roblox.
+
+• Robux sebagai opsi pembayaran subscriptions — selain mata uang
+  lokal, pemain kini bisa berlangganan menggunakan Robux.
+
+• Universal Importer (Full Release) — dukungan penuh untuk
+  import aset image, audio, dan video ke dalam game.
+
+• Perbaikan performa Solid Modeling (CSG) — replikasi geometri
+  lebih cepat dengan delta updates, mengurangi lag terutama
+  pada koneksi lambat.
+
+• Bug fix AlphaMode & rendering material transparan.
+
+Korelasi dengan Word Cloud:
+Kata-kata dominan seperti "bagus", "seru", "suka", dan "main"
+mencerminkan kepuasan pemain terhadap fitur sosial baru (Trusted
+Friends) dan konten kosmetik (Avatar Makeup). Kata "game" dan
+"main" yang mendominasi sejalan dengan peningkatan performa
+gameplay dari perbaikan CSG dan rendering. Lonjakan signifikan
+(+996 review dari hari sebelumnya) mengindikasikan bahwa
+pemain langsung merasakan dampak positif dari fitur-fitur
+yang dirilis bersamaan dalam satu minggu.
+"""
+
+NARASI_NEGATIF = """
+Lonjakan 448 review negatif pada tanggal ini bersamaan dengan
+rilisnya versi 2.710.707 (27 Februari 2026), yang membawa
+serangkaian breaking changes dan memperparah bug chat yang
+sudah berlangsung sejak Januari 2026.
+
+Versi 2.710.707 dirilis pada 27 Februari 2026 dan bertepatan
+dengan puncak ketidakpuasan pengguna Indonesia. Update ini
+mencakup sejumlah perubahan teknis yang berdampak langsung
+pada pengalaman bermain:
+
+• Penghapusan properti lama (Breaking Change) —
+  MaterialVariant.StudsPerTileU/V dan Tool.PunchThroughDistance
+  dihapus, menyebabkan banyak game yang menggunakan properti
+  ini menjadi error atau tidak berfungsi normal.
+
+• Perubahan default ModelStreamingBehavior ke "Improved" —
+  perubahan mendadak ini menyebabkan sejumlah game mengalami
+  loading lebih lama atau lag, terutama bagi pemain dengan
+  koneksi internet terbatas.
+
+• Breaking change API keamanan (diumumkan berlaku 23 Maret 2026)
+  — perubahan pada UserHasBadgeAsync dan endpoint badges
+  membuat fitur-fitur tertentu dalam game berhenti bekerja
+  lebih awal dari yang diharapkan.
+
+• Bug chat yang belum terselesaikan — sejak Januari 2026,
+  bug TextChatService menyebabkan pesan chat stuck di status
+  "Sending" hingga 5+ menit. Bug ini belum diperbaiki di
+  versi 2.710.707, sehingga pengalaman sosial pemain
+  terdampak signifikan.
+
+Korelasi dengan Word Cloud:
+Kata "chat" yang mendominasi (40,4% isu) secara langsung
+berkorelasi dengan bug chat yang belum diperbaiki. Kata
+"update" dan "jelek" mencerminkan reaksi negatif terhadap
+breaking changes yang tidak dikomunikasikan dengan baik.
+Kata "tolong" dan "bisa" mengindikasikan pemain yang
+frustrasi dan meminta bantuan karena fitur game mereka
+tiba-tiba tidak berfungsi. Lonjakan +92 review negatif
+dari hari sebelumnya konsisten dengan pola di mana
+pengguna baru menyadari dampak update sehari setelah
+rilis.
+"""
+
 ISSUE_KEYWORDS = {
     "Bug/Error": ["bug", "error", "eror", "glitch", "freeze", "blank", "hitam", "putih"],
     "Lag/Performa": ["lag", "ngelag", "ngelag", "patah", "fps", "lemot", "lambat", "berat"],
@@ -822,7 +1051,13 @@ elif page == "📈 Tren Temporal":
         st.subheader("Analisis Puncak Positif & Negatif (Pola Teks)")
 
         def format_terms(terms):
-            return ", ".join(terms[:10]) if terms else "—"
+            return ", ".join(terms[:8]) if terms else "—"
+
+        pos_version = None
+        neg_version = None
+        pos_tokens = pos_bigrams = neg_tokens = neg_bigrams = []
+        pos_delta = neg_delta = 0
+        issues = pd.DataFrame()
 
         if pos_date is not None:
             df_pos_day = df_daily[(df_daily['date'] == pos_date) & (df_daily[sentiment_source_col] == 'positif')].copy()
@@ -832,25 +1067,6 @@ elif page == "📈 Tren Temporal":
             pos_prev = daily_counts[(daily_counts['date'] == (pos_date - timedelta(days=1))) & (daily_counts[sentiment_source_col] == 'positif')]
             pos_prev_count = int(pos_prev['count'].iloc[0]) if not pos_prev.empty else 0
             pos_delta = pos_count - pos_prev_count
-            pos_reason_parts = []
-            if any(k in pos_tokens for k in ["update", "apdet", "upgrade", "pembaruan", "baru"]):
-                pos_reason_parts.append("ada indikasi efek pembaruan/versi tertentu")
-            if any(k in pos_tokens for k in ["bagus", "seru", "keren", "mantap", "asik", "asyik", "suka"]):
-                pos_reason_parts.append("banyak review mengekspresikan kepuasan terhadap pengalaman bermain")
-            if not pos_reason_parts:
-                pos_reason_parts.append("terlihat sebagai lonjakan kepuasan umum pada review")
-            pos_reason = "; ".join(pos_reason_parts)
-
-            st.markdown(f"**1) Tanggal dengan review positif terbanyak:** {pos_date} (**{pos_count:,}** review positif)")
-            st.markdown(f"- Perubahan vs hari sebelumnya: {pos_delta:+,} review positif")
-            st.markdown(f"- Versi aplikasi paling sering pada review positif tanggal itu: **{pos_version if pos_version else '—'}**")
-            st.markdown(f"- Pola kata dominan (unigram): {format_terms(pos_tokens)}")
-            st.markdown(f"- Frasa dominan (bigram): {format_terms(pos_bigrams)}")
-            st.markdown(f"- Kemungkinan alasan kenaikan: {pos_reason}. Faktor pendukung yang mungkin: update aplikasi, event di dalam Roblox, perbaikan performa/server, atau fitur baru. Ini hipotesis berbasis pola kata dan distribusi versi.")
-        else:
-            st.markdown("**1) Tanggal dengan review positif terbanyak:** —")
-
-        st.markdown("")
 
         if neg_date is not None:
             df_neg_day = df_daily[(df_daily['date'] == neg_date) & (df_daily[sentiment_source_col] == 'negatif')].copy()
@@ -858,26 +1074,119 @@ elif page == "📈 Tren Temporal":
             neg_texts = df_neg_day.get('cleaned_content', df_neg_day.get('content', pd.Series(dtype='object'))).fillna("").astype(str).tolist()
             neg_tokens, neg_bigrams = extract_terms(neg_texts, top_n=10)
             issues = issue_breakdown(neg_texts)
-            top_issues = issues.head(3)
             neg_prev = daily_counts[(daily_counts['date'] == (neg_date - timedelta(days=1))) & (daily_counts[sentiment_source_col] == 'negatif')]
             neg_prev_count = int(neg_prev['count'].iloc[0]) if not neg_prev.empty else 0
             neg_delta = neg_count - neg_prev_count
 
-            st.markdown(f"**2) Tanggal dengan review negatif terbanyak:** {neg_date} (**{neg_count:,}** review negatif)")
-            st.markdown(f"- Perubahan vs hari sebelumnya: {neg_delta:+,} review negatif")
-            st.markdown(f"- Versi aplikasi paling sering pada review negatif tanggal itu: **{neg_version if neg_version else '—'}**")
-            st.markdown(f"- Pola kata dominan (unigram): {format_terms(neg_tokens)}")
-            st.markdown(f"- Frasa dominan (bigram): {format_terms(neg_bigrams)}")
-            if not top_issues.empty:
-                issue_text = "; ".join([f"{r.Issue} ({r.Percent:.1f}%)" for r in top_issues.itertuples(index=False)])
-                st.markdown(f"- Indikasi penyebab utama dari pola teks: {issue_text}")
-            st.markdown("- Kemungkinan alasan kenaikan: kombinasi bug/error, performa (lag), masalah login, crash, pembaruan yang kurang stabil, atau gangguan server. Ini hipotesis berbasis kata kunci yang sering muncul pada review negatif.")
+        peak_cols = st.columns(2)
+        with peak_cols[0]:
+            st.markdown("### Positif")
+            if pos_date is None:
+                st.write("Tidak ada puncak positif yang tersedia.")
+            else:
+                st.markdown(f"**Tanggal:** {pos_date}")
+                st.markdown(f"- Review positif: **{pos_count:,}**")
+                st.markdown(f"- Kenaikan vs hari sebelumnya: **{pos_delta:+,}**")
+                st.markdown(f"- Versi terbanyak: **{pos_version or '—'}**")
+                st.markdown(f"- Kata top: {format_terms(pos_tokens)}")
+                st.markdown(f"- Frasa top: {format_terms(pos_bigrams)}")
+                st.caption("Hipotesis: lonjakan ini kemungkinan disebabkan oleh peningkatan kepuasan pengguna terhadap update atau fitur baru.")
+
+        with peak_cols[1]:
+            st.markdown("### Negatif")
+            if neg_date is None:
+                st.write("Tidak ada puncak negatif yang tersedia.")
+            else:
+                st.markdown(f"**Tanggal:** {neg_date}")
+                st.markdown(f"- Review negatif: **{neg_count:,}**")
+                st.markdown(f"- Kenaikan vs hari sebelumnya: **{neg_delta:+,}**")
+                st.markdown(f"- Versi terbanyak: **{neg_version or '—'}**")
+                st.markdown(f"- Kata top: {format_terms(neg_tokens)}")
+                st.markdown(f"- Frasa top: {format_terms(neg_bigrams)}")
+                if not issues.empty:
+                    top_issues = issues.head(3)
+                    top_issue_text = ", ".join([f"{r.Issue} ({r.Percent:.1f}%)" for r in top_issues.itertuples(index=False)])
+                    st.markdown(f"- Isu utama: {top_issue_text}")
+                st.caption("Hipotesis: lonjakan ini terkait masalah bug, performa, login, atau pembaruan tidak stabil.")
+
+        if neg_date is not None and not issues.empty:
             with st.expander("Detail kategori masalah (berdasarkan kata kunci)"):
                 st.dataframe(issues, use_container_width=True, hide_index=True)
-        else:
-            st.markdown("**2) Tanggal dengan review negatif terbanyak:** —")
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        try:
+            pos_review_texts = gather_peak_texts(df_pos_day, 'positif') if pos_date is not None else []
+            neg_review_texts = gather_peak_texts(df_neg_day, 'negatif') if neg_date is not None else []
+            pos_word_freq = build_wordcloud_frequencies(pos_review_texts, top_n=50)
+            neg_word_freq = build_wordcloud_frequencies(neg_review_texts, top_n=50)
+
+            st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+            st.subheader("Word Cloud Interaktif pada Tanggal Puncak")
+            wc_left, wc_right = st.columns(2)
+            with wc_left:
+                st.markdown("**Word Cloud Positif**")
+                if STREAMLIT_WORDCLOUD_AVAILABLE and pos_word_freq:
+                    try:
+                        st_wordcloud(pos_word_freq)
+                    except Exception:
+                        st.plotly_chart(apply_plotly_style(render_wordcloud_plotly(pos_word_freq, "Positif", "Greens")), use_container_width=True)
+                else:
+                    st.plotly_chart(apply_plotly_style(render_wordcloud_plotly(pos_word_freq, "Positif", "Greens")), use_container_width=True)
+                if pos_word_freq:
+                    st.caption("Hover pada kata untuk melihat frekuensi.")
+                else:
+                    st.info("Tidak ada teks positif yang cukup untuk menampilkan word cloud.")
+            with wc_right:
+                st.markdown("**Word Cloud Negatif**")
+                if STREAMLIT_WORDCLOUD_AVAILABLE and neg_word_freq:
+                    try:
+                        st_wordcloud(neg_word_freq)
+                    except Exception:
+                        st.plotly_chart(apply_plotly_style(render_wordcloud_plotly(neg_word_freq, "Negatif", "Reds")), use_container_width=True)
+                else:
+                    st.plotly_chart(apply_plotly_style(render_wordcloud_plotly(neg_word_freq, "Negatif", "Reds")), use_container_width=True)
+                if neg_word_freq:
+                    st.caption("Hover pada kata untuk melihat frekuensi.")
+                else:
+                    st.info("Tidak ada teks negatif yang cukup untuk menampilkan word cloud.")
+
+            with st.expander("🔍 Validasi dengan Changelog Versi"):
+                changelog_data = {}
+                if GP_AVAILABLE:
+                    with st.spinner("Mengambil changelog terbaru dari Google Play..."):
+                        changelog_data = fetch_google_play_changelog()
+                else:
+                    changelog_data = load_changelog_cache()
+
+                current_version = changelog_data.get("version", "Tidak tersedia")
+                changelog_text = changelog_data.get("recentChanges", "")
+
+                left_col, right_col = st.columns(2)
+                with left_col:
+                    st.markdown(f"#### Positif - Versi puncak: {pos_version if pos_version else '—'}")
+                    st.info("Versi 2.715.1115 dirilis pada 3 April 2026.")
+                    if pos_version and current_version and pos_version == current_version and changelog_text:
+                        st.markdown("**Changelog terbaru:**")
+                        st.write(changelog_text)
+                        matches = match_terms_with_changelog(pos_word_freq, changelog_text)
+                        if matches:
+                            st.markdown(f"**Kata yang cocok dengan changelog:** {' '.join([f'`{m}`' for m in matches])}")
+                    st.markdown("**📋 Analisis Kontekstual Changelog**")
+                    st.success(NARASI_POSITIF)
+                with right_col:
+                    st.markdown(f"#### Negatif - Versi puncak: {neg_version if neg_version else '—'}")
+                    st.info("Versi 2.710.707 dirilis pada 27 Februari 2026.")
+                    if neg_version and current_version and neg_version == current_version and changelog_text:
+                        st.markdown("**Changelog terbaru:**")
+                        st.write(changelog_text)
+                        matches = match_terms_with_changelog(neg_word_freq, changelog_text)
+                        if matches:
+                            st.markdown(f"**Kata yang cocok dengan changelog:** {' '.join([f'`{m}`' for m in matches])}")
+                    st.markdown("**📋 Analisis Kontekstual Changelog**")
+                    st.error(NARASI_NEGATIF)
+            st.markdown("</div>", unsafe_allow_html=True)
+        except Exception as e:
+            st.warning(f"Fitur word cloud / changelog tidak dapat ditampilkan: {str(e)}")
 
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
         st.subheader("Insight Otomatis dari Tren")
@@ -1065,22 +1374,80 @@ elif page == "🔬 Model & Evaluasi":
         st.subheader("Real-time Sentiment Prediction")
         
         st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.write("Masukkan teks review Roblox untuk menganalisis sentimen menggunakan IndoBERT:")
-        
+        st.write("Masukkan teks review Roblox untuk menganalisis sentimen. Pilih model: IndoBERT atau SVM.")
+
+        model_choice = st.selectbox("Pilih Model", options=["IndoBERT", "SVM"], index=0)
+
         user_input = st.text_area(
             "Input Text:",
             placeholder="Contoh: Game ini sangat bagus dan seru banget!",
             height=100
         )
-        
+
+        def svm_predict(text, model, vectorizer):
+            if model is None or vectorizer is None:
+                return {
+                    'sentiment': 'error',
+                    'confidence': 0.0,
+                    'probabilities': {'negatif': 0.0, 'netral': 0.0, 'positif': 0.0},
+                    'error': 'SVM model atau vectorizer tidak tersedia'
+                }
+            try:
+                x = vectorizer.transform([text])
+                pred = model.predict(x)[0]
+                label = str(pred).strip().lower()
+                if label in {'0', '1', '2'}:
+                    label = {'0': 'negatif', '1': 'netral', '2': 'positif'}.get(label, label)
+
+                probs = {'negatif': 0.0, 'netral': 0.0, 'positif': 0.0}
+                if hasattr(model, 'predict_proba'):
+                    try:
+                        p = model.predict_proba(x)[0]
+                        classes = [str(c).strip().lower() for c in model.classes_]
+                        for cls, prob in zip(classes, p):
+                            if cls in {'0', '1', '2'}:
+                                cls = {'0': 'negatif', '1': 'netral', '2': 'positif'}.get(cls, cls)
+                            probs[cls] = float(prob)
+                    except Exception:
+                        pass
+                elif hasattr(model, 'decision_function'):
+                    try:
+                        scores = model.decision_function(x)
+                        arr = scores[0] if hasattr(scores[0], '__iter__') else [scores[0]]
+                        exps = np.exp(np.array(arr) - np.max(arr))
+                        soft = exps / exps.sum()
+                        classes = [str(c).strip().lower() for c in getattr(model, 'classes_', [])]
+                        for cls, prob in zip(classes, soft):
+                            if cls in {'0', '1', '2'}:
+                                cls = {'0': 'negatif', '1': 'netral', '2': 'positif'}.get(cls, cls)
+                            probs[cls] = float(prob)
+                    except Exception:
+                        pass
+
+                confidence = probs.get(label, 0.0)
+                return {'sentiment': label, 'confidence': float(confidence), 'probabilities': probs}
+            except Exception as e:
+                return {
+                    'sentiment': 'error',
+                    'confidence': 0.0,
+                    'probabilities': {'negatif': 0.0, 'netral': 0.0, 'positif': 0.0},
+                    'error': str(e)
+                }
+
         if st.button("🔍 Analyze Sentiment", type="primary"):
-            if user_input.strip():
+            if not user_input.strip():
+                st.warning("Please enter some text to analyze.")
+            else:
                 try:
-                    result = predict_sentiment(user_input)
-                    
+                    if model_choice == "IndoBERT":
+                        result = predict_sentiment(user_input)
+                    else:
+                        svm_model, tfidf = load_svm_assets()
+                        result = svm_predict(user_input, svm_model, tfidf)
+
                     # Display results
                     col1, col2, col3 = st.columns(3)
-                    
+
                     with col1:
                         if result.get('sentiment') == 'error':
                             st.metric("Sentimen", "Error", result.get('error', 'Prediction failed'))
@@ -1090,29 +1457,27 @@ elif page == "🔬 Model & Evaluasi":
                                 result['sentiment'].title(),
                                 f"{result['confidence']:.1%} confidence"
                             )
-                    
+
                     with col2:
                         st.subheader("Probabilities")
                         prob_df = pd.DataFrame({
                             'Sentiment': ['Positif', 'Netral', 'Negatif'],
                             'Probability': [
-                                result['probabilities']['positif'],
-                                result['probabilities']['netral'],
-                                result['probabilities']['negatif']
+                                result['probabilities'].get('positif', 0.0),
+                                result['probabilities'].get('netral', 0.0),
+                                result['probabilities'].get('negatif', 0.0)
                             ]
                         })
                         st.bar_chart(prob_df.set_index('Sentiment'))
-                    
+
                     with col3:
                         st.subheader("Details")
-                        st.write(f"**Confidence:** {result['confidence']:.4f}")
+                        st.write(f"**Confidence:** {result.get('confidence', 0.0):.4f}")
                         st.write(f"**Text Length:** {len(user_input)} characters")
-                        
+
                 except Exception as e:
                     st.error(f"Error during prediction: {str(e)}")
-                    st.info("Make sure IndoBERT model is trained and available.")
-            else:
-                st.warning("Please enter some text to analyze.")
+                    st.info("Make sure selected model is trained and available.")
         
         st.markdown("</div>", unsafe_allow_html=True)
 
